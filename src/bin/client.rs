@@ -73,6 +73,8 @@ fn print_help_message() {
     println!("get <key>");
     println!("set <key> <value> <ttl>(optional)");
     println!("del <key>");
+    println!("subscribe <topic1> <topic2> ...");
+    println!("publish <topic> <message>");
     println!("ping");
     println!("help");
     println!("exit");
@@ -83,6 +85,100 @@ fn try_get_next<'a>(iter: &mut SplitWhitespace<'a>) -> Result<&'a str, Box<dyn s
         Some(s) => Ok(s),
         None => Err("wrong args".into()),
     }
+}
+
+async fn subscribe(topics: &Vec<String>) -> Vec<i32> {
+    let req = volo_gen::volo::redis::SubscribeRequest {
+        topics: topics.iter().map(|s| FastStr::new(s)).collect(),
+    };
+    let resp = CLIENT.subscribe(req).await;
+    match resp {
+        Ok(resp) => resp.offsets,
+        Err(e) => {
+            tracing::error!("{:?}", e);
+            Vec::new()
+        }
+    }
+}
+
+async fn keep_polling(
+    offsets: Vec<i32>,
+    topics: &Vec<String>,
+    mut signal: tokio::sync::oneshot::Receiver<()>,
+) {
+    let mut offsets = offsets;
+    loop {
+        let req = volo_gen::volo::redis::PollRequest {
+            topics: topics.iter().map(|s| FastStr::new(s)).collect(),
+            offsets: offsets,
+        };
+        let resp = CLIENT.poll(req).await;
+        match resp {
+            Ok(resp) => {
+                for message in resp.messages.iter() {
+                    println!(
+                        "get message from \x1b[32m{}\x1b[0m : \x1b[34m{}\x1b[0m",
+                        message.topic,
+                        message.data.as_str()
+                    );
+                }
+                offsets = resp.offsets;
+            }
+            Err(e) => {
+                tracing::error!("{:?}", e);
+                break;
+            }
+        }
+        // if receive signal, break
+        if signal.try_recv().is_ok() {
+            break;
+        }
+    }
+}
+
+async fn unsubscribe(topics: &Vec<String>) {
+    let req = volo_gen::volo::redis::UnsubscribeRequest {
+        topics: topics.iter().map(|s| FastStr::new(s)).collect(),
+    };
+    let resp = CLIENT.unsubscribe(req).await;
+    match resp {
+        Ok(resp) => {
+            if !resp.success {
+                tracing::error!("unsubscribe failed");
+            }
+        }
+        Err(e) => tracing::error!("{:?}", e),
+    }
+}
+
+async fn publish(topic: &str, message: &str) {
+    let req = volo_gen::volo::redis::PublishRequest {
+        topic: FastStr::new(topic),
+        data: FastStr::new(message),
+    };
+    let resp = CLIENT.publish(req).await;
+    match resp {
+        Ok(resp) => {
+            if !resp.success {
+                tracing::error!("publish failed");
+            }
+        }
+        Err(e) => tracing::error!("{:?}", e),
+    }
+}
+
+async fn sub_mode(topics: Vec<String>) {
+    println!("Entered sub mode, press Ctrl-C to exit");
+    let offsets = subscribe(&topics).await;
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let topics_clone = topics.clone();
+    let _ = tokio::spawn(async move {
+        keep_polling(offsets, &topics_clone, rx).await;
+    });
+    let _ = tokio::signal::ctrl_c().await;
+    let _ = tx.send(());
+    unsubscribe(&topics).await;
+    println!("Exited sub mode");
 }
 
 async fn handle_cmd(cmd: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -108,6 +204,15 @@ async fn handle_cmd(cmd: &str) -> Result<(), Box<dyn std::error::Error>> {
         Some("del") => {
             let key = try_get_next(iter.by_ref())?;
             del_cache(key).await;
+        }
+        Some("subscribe") => {
+            let topics: Vec<String> = iter.map(|s| s.to_string()).collect();
+            sub_mode(topics).await;
+        }
+        Some("publish") => {
+            let topic = try_get_next(iter.by_ref())?;
+            let message = try_get_next(iter.by_ref())?;
+            publish(topic, message).await;
         }
         Some("ping") => {
             ping().await;

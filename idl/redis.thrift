@@ -32,13 +32,16 @@ struct SubscribeRequest {
     1: required list<string> topics;
 }
 
-struct Message {
-    1: required string topic;
-    2: required string data;
+struct SubscribeResponse {
+    1: required list<i32> offsets;
 }
 
-struct SubscribeResponse {
-    1: required list<Message> messages;
+struct UnsubscribeRequest {
+    1: required list<string> topics;
+}
+
+struct UnsubscribeResponse {
+    1: required bool success;
 }
 
 struct PublishRequest {
@@ -50,13 +53,30 @@ struct PublishResponse {
     1: required bool success;
 }
 
+struct Message {
+    1: required string topic;
+    2: required string data;
+}
+
+struct PollRequest {
+    1: required list<string> topics;
+    2: required list<i32> offsets;
+}
+
+struct PollResponse {
+    1: required list<Message> messages;
+    2: required list<i32> offsets;
+}
+
 service Redis {
     GetResponse get(1: GetRequest request);
     SetResponse set(1: SetRequest request);
     DelResponse del(1: DelRequest request);
     PingResponse ping();
     SubscribeResponse subscribe(1: SubscribeRequest request);
+    UnsubscribeResponse unsubscribe(1: UnsubscribeRequest request);
     PublishResponse publish(1: PublishRequest request);
+    PollResponse poll(1: PollRequest request);
 }
 
 

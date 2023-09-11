@@ -1,7 +1,6 @@
 #![feature(impl_trait_in_assoc_type)]
 
 mod middleware;
-mod topic;
 use middleware::{CheckLayer, LogLayer};
 use miniredis::S;
 use std::net::SocketAddr;
