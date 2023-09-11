@@ -42,14 +42,18 @@ impl TopicManager {
     }
 
     pub fn unsubscribe(&self, topic_name: String) {
+        let mut removed = false;
         match self.topics.lock().unwrap().get_mut(&topic_name) {
             Some(topic) => {
                 topic.suscribers -= 1;
                 if topic.suscribers == 0 {
-                    self.topics.lock().unwrap().remove(&topic_name);
+                    removed = true;
                 }
             }
             None => {}
+        }
+        if removed {
+            self.topics.lock().unwrap().remove(&topic_name);
         }
     }
 

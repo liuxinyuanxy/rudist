@@ -5,7 +5,7 @@ use std::{net::SocketAddr, str::SplitWhitespace};
 use volo::FastStr;
 lazy_static! {
     static ref CLIENT: volo_gen::volo::redis::RedisClient = {
-        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let addr: SocketAddr = "127.0.0.1:19260".parse().unwrap();
         volo_gen::volo::redis::RedisClientBuilder::new("redis-client")
             .address(addr)
             .build()
@@ -106,6 +106,7 @@ async fn keep_polling(
     topics: &Vec<String>,
     mut signal: tokio::sync::oneshot::Receiver<()>,
 ) {
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     let mut offsets = offsets;
     loop {
         let req = volo_gen::volo::redis::PollRequest {
@@ -174,7 +175,6 @@ async fn sub_mode(topics: Vec<String>) {
     let topics_clone = topics.clone();
     let _ = tokio::spawn(async move {
         keep_polling(offsets, &topics_clone, rx).await;
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     });
     let _ = tokio::signal::ctrl_c().await;
     let _ = tx.send(());

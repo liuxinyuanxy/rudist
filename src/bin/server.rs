@@ -9,7 +9,7 @@ async fn main() {
     // set the log mod as debug
     tracing_subscriber::fmt::init();
 
-    let addr: SocketAddr = "[::]:8080".parse().unwrap();
+    let addr: SocketAddr = "[::]:19260".parse().unwrap();
     let addr = volo::net::Address::from(addr);
 
     volo_gen::volo::redis::RedisServer::new(S)
