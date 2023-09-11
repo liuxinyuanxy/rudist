@@ -28,8 +28,6 @@ impl<S> volo::Layer<S> for LogLayer {
     }
 }
 
-// a filter to check if the request string is valid
-
 #[derive(Clone)]
 pub struct CheckService<S>(S);
 
@@ -44,12 +42,12 @@ where
 {
     async fn call(&self, cx: &mut Cx, req: Req) -> Result<S::Response, S::Error> {
         // use debug format to print the request
-        let req_str = format!("{:?}", &req);
+        // let req_str = format!("{:?}", &req);
         // check if the request string isn't too long
-        if req_str.len() > 100 {
-            tracing::error!("request too long");
-            // drop this request
-        }
+        // if req_str.len() > 100 {
+        //     tracing::error!("request too long");
+        //     // drop this request
+        // }
 
         let resp = self.0.call(cx, req).await;
         resp

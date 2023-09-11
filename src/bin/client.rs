@@ -174,6 +174,7 @@ async fn sub_mode(topics: Vec<String>) {
     let topics_clone = topics.clone();
     let _ = tokio::spawn(async move {
         keep_polling(offsets, &topics_clone, rx).await;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     });
     let _ = tokio::signal::ctrl_c().await;
     let _ = tx.send(());

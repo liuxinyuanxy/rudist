@@ -36,6 +36,7 @@ impl TopicManager {
     pub fn subscribe(&self, topic_name: String) -> usize {
         let mut binding = self.topics.lock().unwrap();
         let topic = binding.entry(topic_name).or_insert(Topic::new());
+        topic.suscribers += 1;
         let len = topic.messages.lock().unwrap().len();
         len
     }
