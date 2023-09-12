@@ -39,18 +39,24 @@ where
     S::Response: std::fmt::Debug,
     S::Error: std::fmt::Debug,
     Cx: Send + 'static,
+    anyhow::Error: Into<S::Error>,
 {
     async fn call(&self, cx: &mut Cx, req: Req) -> Result<S::Response, S::Error> {
-        // use debug format to print the request
-        // let req_str = format!("{:?}", &req);
-        // check if the request string isn't too long
-        // if req_str.len() > 100 {
-        //     tracing::error!("request too long");
-        //     // drop this request
-        // }
-
-        let resp = self.0.call(cx, req).await;
-        resp
+        let req_str = format!("{:?}", &req);
+        let forbidden = [
+            "shit",
+            "piss",
+            "fuck",
+            "cunt",
+            "cocksucker",
+            "motherfucker",
+            "tits",
+        ];
+        if forbidden.iter().any(|&x| req_str.contains(x)) {
+            Err(anyhow::anyhow!("Using dirty words is not allowed!").into())
+        } else {
+            self.0.call(cx, req).await
+        }
     }
 }
 
