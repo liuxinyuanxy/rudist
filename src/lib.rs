@@ -1,8 +1,10 @@
 #![feature(impl_trait_in_assoc_type)]
 
 mod cache;
+mod conf;
 mod topic;
 use cache::CACHE;
+pub use conf::CONFIG;
 use topic::TOPIC;
 use volo::FastStr;
 pub struct S;
@@ -28,6 +30,9 @@ impl volo_gen::volo::redis::Redis for S {
         _request: volo_gen::volo::redis::SetRequest,
     ) -> ::core::result::Result<volo_gen::volo::redis::SetResponse, ::volo_thrift::AnyhowError>
     {
+        if !CONFIG.is_master() {
+            return Err(anyhow::anyhow!("Set is not allowed on slave").into());
+        }
         let key = _request.key.as_str();
         let value = _request.value.as_str();
         let ttl = _request.ttl;
