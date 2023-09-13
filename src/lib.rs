@@ -1,11 +1,15 @@
 #![feature(impl_trait_in_assoc_type)]
 
-mod cache;
+pub mod cache;
 mod topic;
+use std::{io::Write, time::Instant};
+
 use cache::CACHE;
 use topic::TOPIC;
 use volo::FastStr;
-pub struct S;
+pub struct S {
+    pub file: std::sync::Mutex<std::fs::File>,
+}
 
 #[volo::async_trait]
 impl volo_gen::volo::redis::Redis for S {
@@ -32,6 +36,22 @@ impl volo_gen::volo::redis::Redis for S {
         let value = _request.value.as_str();
         let ttl = _request.ttl;
         CACHE.insert(key.to_string(), value.to_string(), ttl).await;
+        match ttl {
+            Some(ttl) => {
+                let mut file = self.file.lock().unwrap();
+                let expire_at = ttl as u128 * 1000 + std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_millis();
+                let mut buf = format!("*4\n$3\nset\n${}\n{}\n${}\n{}\n", key.len(), key, value.len(), value);
+                if ttl > 0 {
+                    buf.push_str(&format!("${}\n{}\n", expire_at.to_string().len(), expire_at));
+                }
+                file.write_all(buf.as_bytes()).unwrap();
+            }
+            None => {
+                let mut file = self.file.lock().unwrap();
+                let mut buf = format!("*3\n$3\nset\n${}\n{}\n${}\n{}\n", key.len(), key, value.len(), value);
+                file.write_all(buf.as_bytes()).unwrap();
+            }
+        }
         Ok(volo_gen::volo::redis::SetResponse { success: true })
     }
 
@@ -42,6 +62,9 @@ impl volo_gen::volo::redis::Redis for S {
     {
         let key = _request.key.as_str();
         CACHE.del(key).await;
+        let mut file = self.file.lock().unwrap();
+        let mut buf = format!("*2\n$3\ndel\n${}\n{}\n", key.len(), key);
+        file.write_all(buf.as_bytes()).unwrap();
         Ok(volo_gen::volo::redis::DelResponse { success: true })
     }
 
