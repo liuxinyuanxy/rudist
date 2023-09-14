@@ -1,19 +1,29 @@
-### Intro
+# Mini-Redis
 
-A mini-redis, supporting `get`, `set (with ttl)`, `del`, `publish`, `subscribe`.
+Mini-redis is an idiomatic implementation of a [Redis](https://redis.io) client and server written in Rust. The following picture shows the architecture of the project.
+![Architecture](./docs/image.png)
+
+##### Client
+
+The client will parse the command and send it to the server. The client will also parse the response from the server and print it to the console.
+
+##### Redis Cluster Proxy
+
+The proxy send the key to the corresponding server according to the hash value of the key.
+
+##### Server
+
+The server will parse the command and execute it. The server will also parse the response from the server and print it to the console.
 
 ### Features
 
-##### Redis commands
+##### Supported commands
 
 - [x] get
 - [x] set (with ttl)
 - [x] del
 - [x] publish
 - [x] subscribe
-- [x] multi
-- [x] watch
-- [x] exec
 
 ##### AOF (append only file) persistence
 
@@ -53,19 +63,15 @@ cargo build
 To run the client, server, proxy manually, you can use the following commands:
 
 ```bash
-cargo run --bin server <server_name>
 cargo run --bin client <server_address> <command> <args>
-cargo run --bin proxy  <proxy_name>
-```
-
-or with executable file:
-
-```bash
-./server <server_name>
-./client <server_address> <command> <args>
-./proxy  <proxy_name>
+cargo run --bin server <server_name>
+cargo run --bin proxy <proxy_name>
 ```
 
 ### Usage
 
-Check the `*test.sh` for more details.
+Run `cargo run --bin client help` to get the command list.
+
+### A demo:
+
+https://drive.google.com/file/d/1fWt8WPO9Jb0G5f9cSlnGq--41fDuBoKy/view?usp=sharing
