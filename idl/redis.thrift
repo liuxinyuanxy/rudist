@@ -81,5 +81,10 @@ service Redis {
     PollResponse poll(1: PollRequest request);
 }
 
-
+service Proxy {
+    GetResponse get(1: GetRequest request);
+    SetResponse set(1: SetRequest request);
+    DelResponse del(1: DelRequest request);
+    PingResponse ping();
+}
 

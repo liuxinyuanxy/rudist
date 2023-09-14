@@ -23,6 +23,10 @@ async-channel = "1.9.0"
 config = "0.13.3"
 toml = "0.8.0"
 futures = "0.3.28"
+clap = {version = "4.4.3", features=["derive"]}
+serde_derive = "1.0.32"
+serde = "1.0.32"
+crc = "3.0.1"
 
 
 [profile.release]

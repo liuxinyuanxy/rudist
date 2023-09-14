@@ -2,15 +2,17 @@
 
 pub mod cache;
 pub mod conf;
-mod graceful;
 mod config;
+mod graceful;
 mod topic;
+mod utils;
 use cache::CACHE;
-mod proxy_service;
+// mod proxy_service;
 pub use conf::CONFIG;
-use futures::lock::Mutex;
+pub use conf::FILE;
 pub use graceful::CHANNEL;
-use std::io::Write;
+use std::net::SocketAddr;
+use tokio::sync::Mutex;
 use topic::TOPIC;
 use volo::FastStr;
 
@@ -254,5 +256,106 @@ impl volo_gen::volo::redis::Redis for S {
         let key = _request.key.as_str();
         CACHE.del(key).await;
         Ok(volo_gen::volo::redis::DelResponse { success: true })
+    }
+}
+
+struct ProxyInner {
+    inner: Mutex<Vec<volo_gen::volo::redis::RedisClient>>,
+}
+
+unsafe impl Send for ProxyInner {}
+
+impl ProxyInner {
+    fn new() -> Self {
+        let addrs = vec!["127.0.0.1:19261"];
+        let mut clients = Vec::new();
+        for addr in addrs {
+            let addr: SocketAddr = addr.parse().unwrap();
+            let client = volo_gen::volo::redis::RedisClientBuilder::new("redis-client")
+                .address(addr)
+                .build();
+            clients.push(client);
+        }
+        Self {
+            inner: Mutex::new(clients),
+        }
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref SLOTS: ProxyInner = ProxyInner::new();
+}
+pub struct P;
+#[volo::async_trait]
+impl volo_gen::volo::redis::Proxy for P {
+    async fn get(
+        &self,
+        _request: volo_gen::volo::redis::GetRequest,
+    ) -> ::core::result::Result<volo_gen::volo::redis::GetResponse, ::volo_thrift::AnyhowError>
+    {
+        let key = _request.key.as_str();
+        let clients = SLOTS.inner.lock().await;
+        const X25: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_IBM_SDLC);
+        let mut hasher = X25.digest();
+        hasher.update(key.as_bytes());
+        let hash = hasher.finalize();
+        let slot = hash as usize % 16384;
+        let resp = clients[slot]
+            .get(volo_gen::volo::redis::GetRequest {
+                key: FastStr::new(key),
+            })
+            .await?;
+        Ok(resp)
+    }
+
+    async fn set(
+        &self,
+        _request: volo_gen::volo::redis::SetRequest,
+    ) -> ::core::result::Result<volo_gen::volo::redis::SetResponse, ::volo_thrift::AnyhowError>
+    {
+        let key = _request.key.into_string();
+        let value = _request.value.into_string();
+        let ttl = _request.ttl;
+        let clients = SLOTS.inner.lock().await;
+        const X25: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_IBM_SDLC);
+        let mut hasher = X25.digest();
+        hasher.update(key.as_bytes());
+        let hash = hasher.finalize();
+        let slot = hash as usize % 16384;
+        clients[slot]
+            .set(volo_gen::volo::redis::SetRequest {
+                key: FastStr::new(key.as_str()),
+                value: FastStr::new(value.as_str()),
+                ttl,
+            })
+            .await?;
+        Ok(volo_gen::volo::redis::SetResponse { success: true })
+    }
+
+    async fn del(
+        &self,
+        _request: volo_gen::volo::redis::DelRequest,
+    ) -> ::core::result::Result<volo_gen::volo::redis::DelResponse, ::volo_thrift::AnyhowError>
+    {
+        let key = _request.key.into_string();
+        let clients = SLOTS.inner.lock().await;
+        const X25: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_IBM_SDLC);
+        let mut hasher = X25.digest();
+        hasher.update(key.as_bytes());
+        let hash = hasher.finalize();
+        let slot = hash as usize % 16384;
+        clients[slot]
+            .del(volo_gen::volo::redis::DelRequest {
+                key: FastStr::new(key.as_str()),
+            })
+            .await?;
+        Ok(volo_gen::volo::redis::DelResponse { success: true })
+    }
+
+    async fn ping(
+        &self,
+    ) -> ::core::result::Result<volo_gen::volo::redis::PingResponse, ::volo_thrift::AnyhowError>
+    {
+        Ok(volo_gen::volo::redis::PingResponse(FastStr::new("PONG")))
     }
 }
