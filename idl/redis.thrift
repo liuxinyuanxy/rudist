@@ -71,7 +71,9 @@ struct PollResponse {
 service Redis {
     GetResponse get(1: GetRequest request);
     SetResponse set(1: SetRequest request);
+    SetResponse sync(1: SetRequest request);
     DelResponse del(1: DelRequest request);
+    DelResponse sync_del(1: DelRequest request);
     PingResponse ping();
     SubscribeResponse subscribe(1: SubscribeRequest request);
     UnsubscribeResponse unsubscribe(1: UnsubscribeRequest request);

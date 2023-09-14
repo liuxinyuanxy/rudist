@@ -1,14 +1,90 @@
 #![feature(impl_trait_in_assoc_type)]
 
 pub mod cache;
-mod conf;
+pub mod conf;
 mod topic;
+use futures::lock::Mutex;
 use std::io::Write;
 
 use cache::CACHE;
 pub use conf::CONFIG;
 use topic::TOPIC;
 use volo::FastStr;
+
+use std::net::SocketAddr;
+
+struct Inner {
+    inner: Mutex<Vec<volo_gen::volo::redis::RedisClient>>,
+}
+
+unsafe impl Send for Inner {}
+
+impl Inner {
+    fn new() -> Self {
+        let addrs: Option<Vec<String>> = CONFIG.get_slave_addrs();
+        match addrs {
+            Some(addrs) => {
+                let mut clients = Vec::new();
+                for addr in addrs {
+                    let addr: SocketAddr = addr.parse().unwrap();
+                    let client = volo_gen::volo::redis::RedisClientBuilder::new("redis-client")
+                        .address(addr)
+                        .build();
+                    clients.push(client);
+                }
+                Self {
+                    inner: Mutex::new(clients),
+                }
+            }
+            None => Self {
+                inner: Mutex::new(Vec::new()),
+            },
+        }
+    }
+
+    async fn send_set(&self, key: String, value: String, ttl: Option<i32>) {
+        let clients = self.inner.lock().await;
+        for client in clients.iter() {
+            let req = volo_gen::volo::redis::SetRequest {
+                key: FastStr::new(key.as_str()),
+                value: FastStr::new(value.as_str()),
+                ttl,
+            };
+            let resp = client.sync(req).await;
+            match resp {
+                Ok(resp) => {
+                    if !resp.success {
+                        tracing::error!("sync failed to slave");
+                    }
+                }
+                Err(e) => tracing::error!("{:?}", e),
+            }
+        }
+    }
+
+    async fn send_del(&self, key: String) {
+        let mut clients = self.inner.lock().await;
+        for client in clients.iter_mut() {
+            let req = volo_gen::volo::redis::DelRequest {
+                key: FastStr::new(key.as_str()),
+            };
+            let resp = client.sync_del(req).await;
+            match resp {
+                Ok(resp) => {
+                    if !resp.success {
+                        tracing::error!("sync failed to slave");
+                    }
+                }
+                Err(e) => tracing::error!("{:?}", e),
+            }
+        }
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref SLAVES: Inner = Inner::new();
+}
+
 pub struct S {
     pub file: std::sync::Mutex<std::fs::File>,
 }
@@ -37,26 +113,49 @@ impl volo_gen::volo::redis::Redis for S {
         if !CONFIG.is_master() {
             return Err(anyhow::anyhow!("Set is not allowed on slave").into());
         }
-        let key = _request.key.as_str();
-        let value = _request.value.as_str();
+        let key = _request.key.into_string();
+        let value = _request.value.into_string();
         let ttl = _request.ttl;
-        CACHE.insert(key.to_string(), value.to_string(), ttl).await;
+        CACHE.insert(key.clone(), value.clone(), ttl).await;
         match ttl {
             Some(ttl) => {
                 let mut file = self.file.lock().unwrap();
-                let expire_at = ttl as u128 * 1000 + std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_millis();
-                let mut buf = format!("*4\n$3\nset\n${}\n{}\n${}\n{}\n", key.len(), key, value.len(), value);
+                let expire_at = ttl as u128 * 1000
+                    + std::time::SystemTime::now()
+                        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis();
+                let mut buf = format!(
+                    "*4\n$3\nset\n${}\n{}\n${}\n{}\n",
+                    key.len(),
+                    key,
+                    value.len(),
+                    value
+                );
                 if ttl > 0 {
-                    buf.push_str(&format!("${}\n{}\n", expire_at.to_string().len(), expire_at));
+                    buf.push_str(&format!(
+                        "${}\n{}\n",
+                        expire_at.to_string().len(),
+                        expire_at
+                    ));
                 }
                 file.write_all(buf.as_bytes()).unwrap();
             }
             None => {
                 let mut file = self.file.lock().unwrap();
-                let buf = format!("*3\n$3\nset\n${}\n{}\n${}\n{}\n", key.len(), key, value.len(), value);
+                let buf = format!(
+                    "*3\n$3\nset\n${}\n{}\n${}\n{}\n",
+                    key.len(),
+                    key,
+                    value.len(),
+                    value
+                );
                 file.write_all(buf.as_bytes()).unwrap();
             }
         }
+        let _ = tokio::spawn(async move {
+            SLAVES.send_set(key, value, ttl).await;
+        });
         Ok(volo_gen::volo::redis::SetResponse { success: true })
     }
 
@@ -65,11 +164,14 @@ impl volo_gen::volo::redis::Redis for S {
         _request: volo_gen::volo::redis::DelRequest,
     ) -> ::core::result::Result<volo_gen::volo::redis::DelResponse, ::volo_thrift::AnyhowError>
     {
-        let key = _request.key.as_str();
-        CACHE.del(key).await;
+        let key = _request.key.into_string();
+        CACHE.del(&key).await;
         let mut file = self.file.lock().unwrap();
         let buf = format!("*2\n$3\ndel\n${}\n{}\n", key.len(), key);
         file.write_all(buf.as_bytes()).unwrap();
+        let _ = tokio::spawn(async move {
+            SLAVES.send_del(key).await;
+        });
         Ok(volo_gen::volo::redis::DelResponse { success: true })
     }
 
@@ -152,5 +254,27 @@ impl volo_gen::volo::redis::Redis for S {
     ) -> ::core::result::Result<volo_gen::volo::redis::PingResponse, ::volo_thrift::AnyhowError>
     {
         Ok(volo_gen::volo::redis::PingResponse(FastStr::new("PONG")))
+    }
+
+    async fn sync(
+        &self,
+        _request: volo_gen::volo::redis::SetRequest,
+    ) -> ::core::result::Result<volo_gen::volo::redis::SetResponse, ::volo_thrift::AnyhowError>
+    {
+        let key = _request.key.as_str();
+        let value = _request.value.as_str();
+        let ttl = _request.ttl;
+        CACHE.insert(key.to_string(), value.to_string(), ttl).await;
+        Ok(volo_gen::volo::redis::SetResponse { success: true })
+    }
+
+    async fn sync_del(
+        &self,
+        _request: volo_gen::volo::redis::DelRequest,
+    ) -> ::core::result::Result<volo_gen::volo::redis::DelResponse, ::volo_thrift::AnyhowError>
+    {
+        let key = _request.key.as_str();
+        CACHE.del(key).await;
+        Ok(volo_gen::volo::redis::DelResponse { success: true })
     }
 }

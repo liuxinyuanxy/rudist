@@ -6,8 +6,8 @@ use std::sync::Mutex;
 struct Inner {
     name: String,
     is_master: bool,
-    master_addr: Option<String>,
-    slave_addr_myself: Option<String>,
+    my_addr: String,
+    slaves: Option<Vec<String>>,
 }
 
 pub struct Config {
@@ -20,7 +20,7 @@ lazy_static::lazy_static! {
 
 fn load_config(name: &str) -> Inner {
     let settings = config::Config::builder()
-        .add_source(config::File::with_name("src/redis.conf"))
+        .add_source(config::File::with_name("src/redis.toml"))
         .build()
         .unwrap();
     let names: Vec<String> = settings.get("names").unwrap();
@@ -31,15 +31,25 @@ fn load_config(name: &str) -> Inner {
         Inner {
             name: name.to_string(),
             is_master: true,
-            master_addr: Some(addrs[names.iter().position(|x| x == name).unwrap()].clone()),
-            slave_addr_myself: None,
+            my_addr: addrs[names.iter().position(|x| x == name).unwrap()].clone(),
+            slaves: Some(
+                names
+                    .iter()
+                    .filter(|x| *x != name)
+                    .map(|x| addrs[names.iter().position(|y| y == x).unwrap()].clone())
+                    .collect(),
+            ),
+            // master_addr: Some(addrs[names.iter().position(|x| x == name).unwrap()].clone()),
+            // slave_addr_myself: None,
         }
     } else {
         Inner {
             name: name.to_string(),
             is_master: false,
-            master_addr: Some(addrs[names.iter().position(|x| x == &master_name).unwrap()].clone()),
-            slave_addr_myself: Some(addrs[names.iter().position(|x| x == name).unwrap()].clone()),
+            my_addr: addrs[names.iter().position(|x| x == name).unwrap()].clone(),
+            slaves: None,
+            // master_addr: Some(addrs[names.iter().position(|x| x == &master_name).unwrap()].clone()),
+            // slave_addr_myself: Some(addrs[names.iter().position(|x| x == name).unwrap()].clone()),
         }
     }
 }
@@ -65,14 +75,11 @@ impl Config {
 
     pub fn get_my_addr(&self) -> String {
         let inner = self.inner.lock().unwrap();
-        match inner.is_master {
-            true => inner.master_addr.clone().unwrap(),
-            false => inner.slave_addr_myself.clone().unwrap(),
-        }
+        inner.my_addr.clone()
     }
 
-    pub fn get_master_addr(&self) -> String {
+    pub fn get_slave_addrs(&self) -> Option<Vec<String>> {
         let inner = self.inner.lock().unwrap();
-        inner.master_addr.clone().unwrap()
+        inner.slaves.clone()
     }
 }

@@ -1,7 +1,5 @@
-#![feature(try_blocks)]
+#![allow(unused_variables)]
 use lazy_static::lazy_static;
-use miniredis::CONFIG;
-use std::io::Write;
 use std::{net::SocketAddr, str::SplitWhitespace};
 use volo::FastStr;
 lazy_static! {
@@ -235,32 +233,32 @@ async fn handle_cmd(cmd: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn little_cli() {
-    print_help_message();
-    loop {
-        let mut cmd = String::new();
-        print!("> ");
-        let _ = std::io::stdout().flush();
-        std::io::stdin().read_line(&mut cmd).unwrap();
-        // let _ = tokio::spawn(async move {
-        match handle_cmd(cmd.trim()).await {
-            Ok(_) => {}
-            Err(e) => {
-                tracing::error!("{:?}", e);
-                print_help_message();
-            }
-        };
-        // });
-    }
-}
+// async fn little_cli() {
+//     print_help_message();
+//     loop {
+//         let mut cmd = String::new();
+//         print!("> ");
+//         let _ = std::io::stdout().flush();
+//         std::io::stdin().read_line(&mut cmd).unwrap();
+//         // let _ = tokio::spawn(async move {
+//         match handle_cmd(cmd.trim()).await {
+//             Ok(_) => {}
+//             Err(e) => {
+//                 tracing::error!("{:?}", e);
+//                 print_help_message();
+//             }
+//         };
+//         // });
+//     }
+// }
 
 #[volo::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    // tracing_subscriber::fmt::init();
 
     let args: Vec<String> = std::env::args().collect();
     // the command is all args after 1
-    let cmd = args[1..].join(" ");
+    let cmd = args[2..].join(" ");
     handle_cmd(cmd.as_str()).await.unwrap();
     // little_cli().await;
 }
