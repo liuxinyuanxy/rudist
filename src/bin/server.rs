@@ -2,9 +2,9 @@
 
 mod middleware;
 use core::panic;
-use lazy_static::lazy_static;
 use middleware::{CheckLayer, LogLayer};
 use miniredis::cache::CACHE;
+use miniredis::CHANNEL;
 use miniredis::CONFIG;
 use miniredis::S;
 use std::fs::{File, OpenOptions};

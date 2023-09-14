@@ -2,12 +2,13 @@
 
 pub mod cache;
 pub mod conf;
+mod graceful;
 mod topic;
-use futures::lock::Mutex;
-use std::io::Write;
-
 use cache::CACHE;
 pub use conf::CONFIG;
+use futures::lock::Mutex;
+pub use graceful::CHANNEL;
+use std::io::Write;
 use topic::TOPIC;
 use volo::FastStr;
 
@@ -43,6 +44,7 @@ impl Inner {
     }
 
     async fn send_set(&self, key: String, value: String, ttl: Option<i32>) {
+        let send = CHANNEL.send.lock().await.clone();
         let clients = self.inner.lock().await;
         for client in clients.iter() {
             let req = volo_gen::volo::redis::SetRequest {
@@ -60,9 +62,11 @@ impl Inner {
                 Err(e) => tracing::error!("{:?}", e),
             }
         }
+        drop(send);
     }
 
     async fn send_del(&self, key: String) {
+        let send = CHANNEL.send.lock().await.clone();
         let mut clients = self.inner.lock().await;
         for client in clients.iter_mut() {
             let req = volo_gen::volo::redis::DelRequest {
@@ -78,6 +82,7 @@ impl Inner {
                 Err(e) => tracing::error!("{:?}", e),
             }
         }
+        drop(send);
     }
 }
 
