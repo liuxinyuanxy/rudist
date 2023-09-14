@@ -2,18 +2,19 @@
 
 mod middleware;
 use middleware::{CheckLayer, LogLayer};
+use miniredis::CONFIG;
 use miniredis::S;
 use miniredis::cache::CACHE;
 use core::panic;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::fs::{OpenOptions, File};
+
 #[volo::main]
 async fn main() {
-    // set the log mod as debug
     tracing_subscriber::fmt::init();
 
-    let addr: SocketAddr = "[::]:19260".parse().unwrap();
+    let addr: SocketAddr = CONFIG.get_my_addr().parse().unwrap();
     let addr = volo::net::Address::from(addr);
 
     if !std::path::Path::new("log").exists() {
@@ -28,6 +29,36 @@ async fn main() {
         .unwrap();
     init_cache(&mut file).await;
 
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+
+    // start a new thread to subscribe to master
+    let _ = tokio::spawn(async move {
+        let addr: SocketAddr = CONFIG.get_master_addr().parse().unwrap();
+        let master = volo_gen::volo::redis::RedisClientBuilder::new(CONFIG.get_name())
+            .address(addr)
+            .build();
+        let myselfaddr = CONFIG.get_my_addr();
+
+        let myself = volo_gen::volo::redis::RedisClientBuilder::new(CONFIG.get_name())
+            .address(myselfaddr.parse().unwrap())
+            .build();
+        let mut offset = -1;
+        loop {
+            if rx.try_recv().is_ok() {
+                break;
+            }
+            let mut request = volo_gen::volo::redis::SyncRequest::default();
+            request.offset = offset;
+            let response = master.dump_to(request).await.unwrap();
+            offset = response.offset;
+            let aof = response.aof;
+            let mut request = volo_gen::volo::redis::SyncRequest::default();
+            request.aof = aof;
+            myself.load_from(request).await.unwrap();
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        }
+    });
+
     volo_gen::volo::redis::RedisServer::new(S{
         file: std::sync::Mutex::new(file),
     })
@@ -36,11 +67,12 @@ async fn main() {
         .run(addr)
         .await
         .unwrap();
+    let _ = tx.send(());
 }
 
 async fn init_cache(file: &mut File) {
     let mut buf = String::new();
-    file.read_to_string(&mut buf).unwrap(); // *3\n$3\nset\n$3\nkey\n$5\nvalue\n
+    file.read_to_string(&mut buf).unwrap();
     let mut lines = buf.split("\n");
     while let Some(line) = lines.next() {
         if line.starts_with("*") {

@@ -1,10 +1,12 @@
 #![feature(impl_trait_in_assoc_type)]
 
 pub mod cache;
+mod conf;
 mod topic;
-use std::{io::Write, time::Instant};
+use std::io::Write;
 
 use cache::CACHE;
+pub use conf::CONFIG;
 use topic::TOPIC;
 use volo::FastStr;
 pub struct S {
@@ -32,6 +34,9 @@ impl volo_gen::volo::redis::Redis for S {
         _request: volo_gen::volo::redis::SetRequest,
     ) -> ::core::result::Result<volo_gen::volo::redis::SetResponse, ::volo_thrift::AnyhowError>
     {
+        if !CONFIG.is_master() {
+            return Err(anyhow::anyhow!("Set is not allowed on slave").into());
+        }
         let key = _request.key.as_str();
         let value = _request.value.as_str();
         let ttl = _request.ttl;
@@ -48,7 +53,7 @@ impl volo_gen::volo::redis::Redis for S {
             }
             None => {
                 let mut file = self.file.lock().unwrap();
-                let mut buf = format!("*3\n$3\nset\n${}\n{}\n${}\n{}\n", key.len(), key, value.len(), value);
+                let buf = format!("*3\n$3\nset\n${}\n{}\n${}\n{}\n", key.len(), key, value.len(), value);
                 file.write_all(buf.as_bytes()).unwrap();
             }
         }
@@ -63,7 +68,7 @@ impl volo_gen::volo::redis::Redis for S {
         let key = _request.key.as_str();
         CACHE.del(key).await;
         let mut file = self.file.lock().unwrap();
-        let mut buf = format!("*2\n$3\ndel\n${}\n{}\n", key.len(), key);
+        let buf = format!("*2\n$3\ndel\n${}\n{}\n", key.len(), key);
         file.write_all(buf.as_bytes()).unwrap();
         Ok(volo_gen::volo::redis::DelResponse { success: true })
     }
