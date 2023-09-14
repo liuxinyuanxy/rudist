@@ -193,7 +193,6 @@ async fn handle_cmd(cmd: &str) -> Result<(), Box<dyn std::error::Error>> {
                     println!("the value in {} is \x1b[34m{}\x1b[0m", key, value);
                 }
                 None => {
-                    println!("key not found");
                     tracing::error!("key not found");
                 }
             }
@@ -255,7 +254,7 @@ async fn handle_cmd(cmd: &str) -> Result<(), Box<dyn std::error::Error>> {
 
 #[volo::main]
 async fn main() {
-    // tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt::init();
 
     let args: Vec<String> = std::env::args().collect();
     // the command is all args after 1

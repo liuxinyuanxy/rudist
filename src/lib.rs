@@ -2,7 +2,6 @@
 
 pub mod cache;
 pub mod conf;
-mod config;
 mod graceful;
 mod topic;
 mod utils;

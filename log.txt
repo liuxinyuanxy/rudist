@@ -1,0 +1,35 @@
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue1[0m
+key not found
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue1[0m
+key not found
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue2[0m
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue1[0m
+key not found
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue2[0m
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue1[0m
+key not found
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue2[0m
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue1[0m
+key not found
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue2[0m
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue1[0m
+key not found
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue2[0m
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue1[0m
+key not found
+the value in key1 is [34mvalue1[0m
+the value in key1 is [34mvalue2[0m
