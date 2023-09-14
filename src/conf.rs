@@ -2,7 +2,7 @@
 #![allow(unused_variables)]
 
 use std::sync::Mutex;
-
+use tokio::io::AsyncWriteExt;
 struct Inner {
     name: String,
     is_master: bool,
@@ -14,8 +14,48 @@ pub struct Config {
     inner: Mutex<Inner>,
 }
 
+pub struct File {
+    file: tokio::sync::Mutex<Option<tokio::fs::File>>,
+}
+
+impl File {
+    fn new() -> Self {
+        Self {
+            file: tokio::sync::Mutex::new(None),
+        }
+    }
+
+    pub async fn set_file(&self, filename: String) {
+        let file = tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(filename)
+            .await
+            .unwrap();
+        let mut inner = self.file.lock().await;
+        *inner = Some(file);
+    }
+
+    pub async fn write_to_file_new_thread(
+        &self,
+        buf: String,
+        sender: Option<tokio::sync::mpsc::Sender<()>>,
+    ) {
+        let inner = self.file.lock().await;
+        let file = inner.as_ref();
+        if let Some(file) = file.as_ref() {
+            let mut file = file.try_clone().await.unwrap();
+            let _ = tokio::spawn(async move {
+                file.write_all(buf.as_bytes()).await.unwrap();
+                drop(sender)
+            });
+        }
+    }
+}
+
 lazy_static::lazy_static! {
     pub static ref CONFIG: Config = Config::new();
+    pub static ref FILE: File = File::new();
 }
 
 fn load_config(name: &str) -> Inner {
@@ -26,6 +66,7 @@ fn load_config(name: &str) -> Inner {
     let names: Vec<String> = settings.get("names").unwrap();
     let addrs: Vec<String> = settings.get("addrs").unwrap();
     let master_name: String = settings.get("master").unwrap();
+    let file_name = "log/aof.log".to_string();
 
     if master_name == name {
         Inner {

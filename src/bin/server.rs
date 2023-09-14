@@ -6,6 +6,7 @@ use middleware::{CheckLayer, LogLayer};
 use miniredis::cache::CACHE;
 use miniredis::CHANNEL;
 use miniredis::CONFIG;
+use miniredis::FILE;
 use miniredis::S;
 use std::fs::{File, OpenOptions};
 use std::io::Read;
@@ -28,15 +29,14 @@ async fn main() {
         .open("log/aof.log")
         .unwrap();
     init_cache(&mut file).await;
+    FILE.set_file("log/aof.log".to_string()).await;
 
-    volo_gen::volo::redis::RedisServer::new(S {
-        file: std::sync::Mutex::new(file),
-    })
-    .layer_front(LogLayer)
-    .layer_front(CheckLayer)
-    .run(addr)
-    .await
-    .unwrap();
+    volo_gen::volo::redis::RedisServer::new(S)
+        .layer_front(LogLayer)
+        .layer_front(CheckLayer)
+        .run(addr)
+        .await
+        .unwrap();
 
     *CHANNEL.send.lock().await = None;
     let _ = CHANNEL.recv.lock().await.recv().await;

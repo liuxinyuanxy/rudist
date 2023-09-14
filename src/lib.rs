@@ -4,11 +4,12 @@ pub mod cache;
 pub mod conf;
 mod graceful;
 mod topic;
+mod utils;
 use cache::CACHE;
 pub use conf::CONFIG;
-use futures::lock::Mutex;
+pub use conf::FILE;
 pub use graceful::CHANNEL;
-use std::io::Write;
+use tokio::sync::Mutex;
 use topic::TOPIC;
 use volo::FastStr;
 
@@ -90,9 +91,7 @@ lazy_static::lazy_static! {
     static ref SLAVES: Inner = Inner::new();
 }
 
-pub struct S {
-    pub file: std::sync::Mutex<std::fs::File>,
-}
+pub struct S;
 
 #[volo::async_trait]
 impl volo_gen::volo::redis::Redis for S {
@@ -122,42 +121,12 @@ impl volo_gen::volo::redis::Redis for S {
         let value = _request.value.into_string();
         let ttl = _request.ttl;
         CACHE.insert(key.clone(), value.clone(), ttl).await;
-        match ttl {
-            Some(ttl) => {
-                let mut file = self.file.lock().unwrap();
-                let expire_at = ttl as u128 * 1000
-                    + std::time::SystemTime::now()
-                        .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                        .unwrap()
-                        .as_millis();
-                let mut buf = format!(
-                    "*4\n$3\nset\n${}\n{}\n${}\n{}\n",
-                    key.len(),
-                    key,
-                    value.len(),
-                    value
-                );
-                if ttl > 0 {
-                    buf.push_str(&format!(
-                        "${}\n{}\n",
-                        expire_at.to_string().len(),
-                        expire_at
-                    ));
-                }
-                file.write_all(buf.as_bytes()).unwrap();
-            }
-            None => {
-                let mut file = self.file.lock().unwrap();
-                let buf = format!(
-                    "*3\n$3\nset\n${}\n{}\n${}\n{}\n",
-                    key.len(),
-                    key,
-                    value.len(),
-                    value
-                );
-                file.write_all(buf.as_bytes()).unwrap();
-            }
-        }
+        FILE.write_to_file_new_thread(
+            utils::set_to_string(&key, &value, ttl).await,
+            CHANNEL.send.lock().await.clone(),
+        )
+        .await;
+
         let _ = tokio::spawn(async move {
             SLAVES.send_set(key, value, ttl).await;
         });
@@ -169,11 +138,16 @@ impl volo_gen::volo::redis::Redis for S {
         _request: volo_gen::volo::redis::DelRequest,
     ) -> ::core::result::Result<volo_gen::volo::redis::DelResponse, ::volo_thrift::AnyhowError>
     {
+        if !CONFIG.is_master() {
+            return Err(anyhow::anyhow!("Del is not allowed on slave").into());
+        }
         let key = _request.key.into_string();
         CACHE.del(&key).await;
-        let mut file = self.file.lock().unwrap();
-        let buf = format!("*2\n$3\ndel\n${}\n{}\n", key.len(), key);
-        file.write_all(buf.as_bytes()).unwrap();
+        FILE.write_to_file_new_thread(
+            utils::del_to_string(&key).await,
+            CHANNEL.send.lock().await.clone(),
+        )
+        .await;
         let _ = tokio::spawn(async move {
             SLAVES.send_del(key).await;
         });
