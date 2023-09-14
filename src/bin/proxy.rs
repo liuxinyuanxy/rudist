@@ -3,6 +3,7 @@
 mod middleware;
 use middleware::{CheckLayer, LogLayer};
 use miniredis::CHANNEL;
+#[allow(unused_imports)]
 use miniredis::CONFIG;
 use miniredis::P;
 use std::net::SocketAddr;
