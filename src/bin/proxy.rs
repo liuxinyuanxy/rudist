@@ -10,7 +10,12 @@ use std::net::SocketAddr;
 #[volo::main]
 async fn main() {
     // tracing_subscriber::fmt::init();
-    let addr: SocketAddr = CONFIG.get_my_addr().parse().unwrap();
+    let settings = config::Config::builder()
+        .add_source(config::File::with_name("src/redis.toml"))
+        .build()
+        .unwrap();
+    let addr: String = settings.get("proxy_addr").unwrap();
+    let addr: SocketAddr = addr.parse().unwrap();
     let addr = volo::net::Address::from(addr);
 
     volo_gen::volo::redis::ProxyServer::new(P)

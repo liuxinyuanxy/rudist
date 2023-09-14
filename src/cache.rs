@@ -1,9 +1,9 @@
+use crate::TRANSACTION;
 use std::{
     collections::HashMap,
     sync::Mutex,
     time::{Duration, Instant},
 };
-
 lazy_static::lazy_static! {
     pub static ref CACHE: Cache = Cache::new(1024);
 }
@@ -65,6 +65,16 @@ where
 struct Entity {
     value: String,
     expired_at: Option<Instant>,
+    watched: Mutex<Vec<String>>,
+}
+
+impl Entity {
+    fn watch(&self) {
+        let watched = self.watched.lock().unwrap();
+        for watcher in watched.iter() {
+            TRANSACTION.set_invalid(&watcher)
+        }
+    }
 }
 
 impl CanExpire for Entity {
@@ -90,12 +100,21 @@ impl Cache {
     }
 
     pub async fn insert(&self, key: String, value: String, ttl: Option<i32>) {
+        {
+            let mut cache = self.cache.lock().unwrap();
+            let entity = cache.cache_get(&key);
+            match entity {
+                Some(entity) => entity.watch(),
+                None => (),
+            }
+        }
         let entity = Entity {
             value,
             expired_at: match ttl {
                 Some(ttl) => Some(Instant::now() + Duration::from_secs(ttl as u64)),
                 None => None,
             },
+            watched: Mutex::new(Vec::new()),
         };
         tracing::debug!("try to insert key: {}", key);
         self.cache.lock().unwrap().cache_set(key, entity);
@@ -113,7 +132,24 @@ impl Cache {
 
     pub async fn del(&self, key: &str) {
         tracing::debug!("try to del key: {}", key);
+        {
+            let mut cache = self.cache.lock().unwrap();
+            let entity = cache.cache_get(key);
+            match entity {
+                Some(entity) => entity.watch(),
+                None => (),
+            }
+        }
         self.cache.lock().unwrap().cache_remove(key);
         tracing::debug!("key deleted")
+    }
+
+    pub async fn watch(&self, key: &str, watcher: String) {
+        tracing::debug!("try to watch key: {}", key);
+        let mut cache = self.cache.lock().unwrap();
+        let entity = cache.cache_get(key).unwrap();
+        let mut watched = entity.watched.lock().unwrap();
+        watched.push(watcher);
+        tracing::debug!("key watched")
     }
 }

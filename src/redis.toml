@@ -1,4 +1,6 @@
 master = "master"
-
+master_slave_on = false
+cluster_on = true
 names = ["master", "slave1", "slave2"]
 addrs = ["127.0.0.1:19261", "127.0.0.1:19262", "127.0.0.1:19263"]
+proxy_addr = "127.0.0.1:19290"

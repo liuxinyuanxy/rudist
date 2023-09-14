@@ -37,3 +37,7 @@ pub async fn set_to_string(key: &str, value: &str, ttl: Option<i32>) -> String {
 pub async fn del_to_string(key: &str) -> String {
     format!("*2\n$3\ndel\n${}\n{}\n", key.len(), key)
 }
+
+pub async fn get_to_string(key: &str) -> String {
+    format!("*2\n$3\nget\n${}\n{}\n", key.len(), key)
+}

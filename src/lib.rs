@@ -1,9 +1,11 @@
 #![feature(impl_trait_in_assoc_type)]
-
+#![feature(return_position_impl_trait_in_trait)]
+#![feature(unboxed_closures)]
 pub mod cache;
 pub mod conf;
 mod graceful;
 mod topic;
+mod transaction;
 mod utils;
 use cache::CACHE;
 // mod proxy_service;
@@ -13,6 +15,7 @@ pub use graceful::CHANNEL;
 use std::net::SocketAddr;
 use tokio::sync::Mutex;
 use topic::TOPIC;
+pub use transaction::TRANSACTION;
 use volo::FastStr;
 
 struct Inner {
@@ -266,7 +269,11 @@ unsafe impl Send for ProxyInner {}
 
 impl ProxyInner {
     fn new() -> Self {
-        let addrs = vec!["127.0.0.1:19261"];
+        let settings = config::Config::builder()
+            .add_source(config::File::with_name("src/redis.toml"))
+            .build()
+            .unwrap();
+        let addrs: Vec<String> = settings.get("addrs").unwrap();
         let mut clients = Vec::new();
         for addr in addrs {
             let addr: SocketAddr = addr.parse().unwrap();
@@ -298,7 +305,7 @@ impl volo_gen::volo::redis::Proxy for P {
         let mut hasher = X25.digest();
         hasher.update(key.as_bytes());
         let hash = hasher.finalize();
-        let slot = hash as usize % 16384;
+        let slot = hash as usize % 3;
         let resp = clients[slot]
             .get(volo_gen::volo::redis::GetRequest {
                 key: FastStr::new(key),
@@ -320,7 +327,7 @@ impl volo_gen::volo::redis::Proxy for P {
         let mut hasher = X25.digest();
         hasher.update(key.as_bytes());
         let hash = hasher.finalize();
-        let slot = hash as usize % 16384;
+        let slot = hash as usize % 3;
         clients[slot]
             .set(volo_gen::volo::redis::SetRequest {
                 key: FastStr::new(key.as_str()),

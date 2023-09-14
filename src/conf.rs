@@ -66,31 +66,44 @@ fn load_config(name: &str) -> Inner {
     let names: Vec<String> = settings.get("names").unwrap();
     let addrs: Vec<String> = settings.get("addrs").unwrap();
     let master_name: String = settings.get("master").unwrap();
+    let master_slave_on = false;
+    // let master_slave_on: bool = settings.get("master_slave_on").unwrap();
+    let cluster_on: bool = settings.get("cluster_on").unwrap();
     let file_name = "log/aof.log".to_string();
-
-    if master_name == name {
-        Inner {
-            name: name.to_string(),
-            is_master: true,
-            my_addr: addrs[names.iter().position(|x| x == name).unwrap()].clone(),
-            slaves: Some(
-                names
-                    .iter()
-                    .filter(|x| *x != name)
-                    .map(|x| addrs[names.iter().position(|y| y == x).unwrap()].clone())
-                    .collect(),
-            ),
-            // master_addr: Some(addrs[names.iter().position(|x| x == name).unwrap()].clone()),
-            // slave_addr_myself: None,
+    if master_slave_on {
+        if master_name == name {
+            Inner {
+                name: name.to_string(),
+                is_master: true,
+                my_addr: addrs[names.iter().position(|x| x == name).unwrap()].clone(),
+                slaves: Some(
+                    names
+                        .iter()
+                        .filter(|x| *x != name)
+                        .map(|x| addrs[names.iter().position(|y| y == x).unwrap()].clone())
+                        .collect(),
+                ),
+                // master_addr: Some(addrs[names.iter().position(|x| x == name).unwrap()].clone()),
+                // slave_addr_myself: None,
+            }
+        } else {
+            Inner {
+                name: name.to_string(),
+                is_master: false,
+                my_addr: addrs[names.iter().position(|x| x == name).unwrap()].clone(),
+                slaves: None,
+                // master_addr: Some(addrs[names.iter().position(|x| x == &master_name).unwrap()].clone()),
+                // slave_addr_myself: Some(addrs[names.iter().position(|x| x == name).unwrap()].clone()),
+            }
         }
     } else {
         Inner {
             name: name.to_string(),
-            is_master: false,
+            is_master: true,
             my_addr: addrs[names.iter().position(|x| x == name).unwrap()].clone(),
             slaves: None,
-            // master_addr: Some(addrs[names.iter().position(|x| x == &master_name).unwrap()].clone()),
-            // slave_addr_myself: Some(addrs[names.iter().position(|x| x == name).unwrap()].clone()),
+            // master_addr: None,
+            // slave_addr_myself: None,
         }
     }
 }
