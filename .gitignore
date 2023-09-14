@@ -2,7 +2,6 @@
 .idea/
 .vscode/
 target/
-log/
 *.code-workspace
 
 Cargo.lock
