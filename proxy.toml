@@ -1,0 +1,11 @@
+[[proxy]]
+name = "node1"
+listen = 19261
+target = "127.0.0.1:19261"
+
+[[proxy]]
+name = "node2"
+listen = 19262
+target = "127.0.0.1:19261"
+
+

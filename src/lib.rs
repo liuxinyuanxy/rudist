@@ -3,17 +3,16 @@
 pub mod cache;
 pub mod conf;
 mod graceful;
+mod config;
 mod topic;
-mod utils;
 use cache::CACHE;
+mod proxy_service;
 pub use conf::CONFIG;
-pub use conf::FILE;
+use futures::lock::Mutex;
 pub use graceful::CHANNEL;
-use tokio::sync::Mutex;
+use std::io::Write;
 use topic::TOPIC;
 use volo::FastStr;
-
-use std::net::SocketAddr;
 
 struct Inner {
     inner: Mutex<Vec<volo_gen::volo::redis::RedisClient>>,
