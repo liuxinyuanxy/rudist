@@ -66,6 +66,12 @@ or with executable file:
 ./proxy  <proxy_name>
 ```
 
+To run the cli of the client:
+
+```bash
+cargo run --bin client <server_address> cli
+```
+
 ### Usage
 
 Check the `*test.sh` for more details.
