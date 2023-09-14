@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 
 #[volo::main]
 async fn main() {
-    // tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt::init();
     let addr: SocketAddr = CONFIG.get_my_addr().parse().unwrap();
     let addr = volo::net::Address::from(addr);
 

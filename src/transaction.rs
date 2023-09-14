@@ -1,6 +1,7 @@
 use crate::CACHE;
 use lazy_static::lazy_static;
-use std::{collections::HashMap, sync::Mutex};
+use std::collections::HashMap;
+use tokio::sync::Mutex;
 
 struct Entity {
     commands: Mutex<Vec<String>>,
@@ -14,8 +15,8 @@ impl Entity {
             valid: Mutex::new(true),
         }
     }
-    fn set_invalid(&self) {
-        let mut inner = self.valid.lock().unwrap();
+    async fn set_invalid(&self) {
+        let mut inner = self.valid.lock().await;
         *inner = false;
     }
 }
@@ -31,37 +32,47 @@ impl Transaction {
         }
     }
 
-    pub fn new_transaction(&self) -> String {
+    pub async fn new_transaction(&self) -> String {
         let transaction_id = uuid::Uuid::new_v4().to_string();
         let entity = Entity::new();
         self.data
             .lock()
-            .unwrap()
+            .await
             .insert(transaction_id.clone(), entity);
         transaction_id
     }
 
-    pub fn add_command(&self, transaction_id: &str, command: &str) {
-        let inner = self.data.lock().unwrap();
+    pub async fn add_command(&self, transaction_id: &str, command: &str) {
+        let inner = self.data.lock().await;
         let entity = inner.get(transaction_id).unwrap();
-        entity.commands.lock().unwrap().push(command.to_string());
+        entity.commands.lock().await.push(command.to_string());
     }
 
-    pub fn set_invalid(&self, transaction_id: &str) {
-        let inner = self.data.lock().unwrap();
+    pub async fn set_invalid(&self, transaction_id: &str) {
+        let inner = self.data.lock().await;
         let entity = inner.get(transaction_id).unwrap();
-        entity.set_invalid();
+        entity.set_invalid().await;
     }
 
     pub async fn exec(&self, transaction_id: &str) -> Option<Vec<Option<String>>> {
         let mut res = Vec::new();
-        let inner = self.data.lock().unwrap();
+        let inner = self.data.lock().await;
         let entity = inner.get(transaction_id).unwrap();
-        if !*entity.valid.lock().unwrap() {
+        if !*entity.valid.lock().await {
             return None;
         }
-        let commands = entity.commands.lock().unwrap();
-        let mut lines = commands.iter();
+        let commands = entity.commands.lock().await;
+
+        tracing::info!("{:?}", commands);
+        let mut commands_splited: Vec<String> = Vec::new();
+        let lines = commands.iter();
+        lines.for_each(|x| {
+            let mut line = x.split('\n');
+            while let Some(value) = line.next() {
+                commands_splited.push(value.to_string())
+            }
+        });
+        let mut lines = commands_splited.iter();
         while let Some(line) = lines.next() {
             if line.starts_with("*") {
                 let mut line = line.chars();

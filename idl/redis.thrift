@@ -4,6 +4,11 @@ struct GetRequest {
     1: required string key;
 }
 
+struct TrGetRequest {
+    1: required string key;
+    2: required string id;
+}
+
 struct GetResponse {
     1: optional string value;
 }
@@ -14,12 +19,24 @@ struct SetRequest {
     3: optional i32 ttl;
 }
 
+struct TrSetRequest {
+    1: required string key;
+    2: required string value;
+    3: required string id;
+    4: optional i32 ttl;
+}
+
 struct SetResponse {
     1: required bool success;
 }
 
 struct DelRequest {
     1: required string key;
+}
+
+struct TrDelRequest {
+    1: required string key;
+    2: required string id;
 }
 
 struct DelResponse {
@@ -68,6 +85,22 @@ struct PollResponse {
     2: required list<i32> offsets;
 }
 
+typedef string MultiResponse
+
+struct ExecResponse {
+    1: required bool valid;
+    2: required list<string> results;
+}
+
+struct WatchRequest {
+    1: required string key;
+    2: required string id;
+}
+
+
+typedef string ExecRequest
+typedef bool BoolResponse
+
 service Redis {
     GetResponse get(1: GetRequest request);
     SetResponse set(1: SetRequest request);
@@ -79,6 +112,12 @@ service Redis {
     UnsubscribeResponse unsubscribe(1: UnsubscribeRequest request);
     PublishResponse publish(1: PublishRequest request);
     PollResponse poll(1: PollRequest request);
+    MultiResponse multi();
+    ExecResponse exec(1: ExecRequest request);
+    BoolResponse watch(1: WatchRequest request);
+    BoolResponse trget(1: TrGetRequest request);
+    BoolResponse trset(1: TrSetRequest request);
+    BoolResponse trdel(1: TrDelRequest request);
 }
 
 service Proxy {

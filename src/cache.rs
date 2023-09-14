@@ -72,7 +72,8 @@ impl Entity {
     fn watch(&self) {
         let watched = self.watched.lock().unwrap();
         for watcher in watched.iter() {
-            TRANSACTION.set_invalid(&watcher)
+            let id = watcher.clone();
+            let _ = tokio::spawn(async move { TRANSACTION.set_invalid(&id).await });
         }
     }
 }

@@ -259,6 +259,94 @@ impl volo_gen::volo::redis::Redis for S {
         CACHE.del(key).await;
         Ok(volo_gen::volo::redis::DelResponse { success: true })
     }
+
+    async fn multi(
+        &self,
+    ) -> ::core::result::Result<volo_gen::volo::redis::MultiResponse, ::volo_thrift::AnyhowError>
+    {
+        let transaction_id = TRANSACTION.new_transaction().await;
+        Ok(volo_gen::volo::redis::MultiResponse(FastStr::new(
+            transaction_id,
+        )))
+    }
+
+    async fn watch(
+        &self,
+        _request: volo_gen::volo::redis::WatchRequest,
+    ) -> ::core::result::Result<volo_gen::volo::redis::BoolResponse, ::volo_thrift::AnyhowError>
+    {
+        let transaction_id = _request.id.to_string();
+        let key = _request.key.to_string();
+        CACHE.watch(&key, transaction_id).await;
+        Ok(volo_gen::volo::redis::BoolResponse(true))
+    }
+
+    async fn exec(
+        &self,
+        _request: volo_gen::volo::redis::ExecRequest,
+    ) -> ::core::result::Result<volo_gen::volo::redis::ExecResponse, ::volo_thrift::AnyhowError>
+    {
+        let transaction_id = _request.0.to_string();
+        let res = TRANSACTION.exec(&transaction_id).await;
+        match res {
+            Some(value) => Ok(volo_gen::volo::redis::ExecResponse {
+                valid: true,
+                results: value
+                    .into_iter()
+                    .map(|x| match x {
+                        Some(v) => FastStr::new(v),
+                        None => FastStr::new("key not found".to_string()),
+                    })
+                    .collect(),
+            }),
+            None => Ok(volo_gen::volo::redis::ExecResponse {
+                valid: false,
+                results: Vec::new(),
+            }),
+        }
+    }
+
+    async fn trget(
+        &self,
+        _request: volo_gen::volo::redis::TrGetRequest,
+    ) -> ::core::result::Result<volo_gen::volo::redis::BoolResponse, ::volo_thrift::AnyhowError>
+    {
+        let transaction_id = _request.id.to_string();
+        let key = _request.key.to_string();
+        TRANSACTION
+            .add_command(&transaction_id, &utils::get_to_string(&key).await)
+            .await;
+        Ok(volo_gen::volo::redis::BoolResponse(true))
+    }
+    async fn trset(
+        &self,
+        _request: volo_gen::volo::redis::TrSetRequest,
+    ) -> ::core::result::Result<volo_gen::volo::redis::BoolResponse, ::volo_thrift::AnyhowError>
+    {
+        let transaction_id = _request.id.to_string();
+        let key = _request.key.into_string();
+        let value = _request.value.into_string();
+        let ttl = _request.ttl;
+        TRANSACTION
+            .add_command(
+                &transaction_id,
+                &utils::set_to_string(&key, &value, ttl).await,
+            )
+            .await;
+        Ok(volo_gen::volo::redis::BoolResponse(true))
+    }
+    async fn trdel(
+        &self,
+        _request: volo_gen::volo::redis::TrDelRequest,
+    ) -> ::core::result::Result<volo_gen::volo::redis::BoolResponse, ::volo_thrift::AnyhowError>
+    {
+        let transaction_id = _request.id.to_string();
+        let key = _request.key.to_string();
+        TRANSACTION
+            .add_command(&transaction_id, &utils::del_to_string(&key).await)
+            .await;
+        Ok(volo_gen::volo::redis::BoolResponse(true))
+    }
 }
 
 struct ProxyInner {
