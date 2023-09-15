@@ -1,4 +1,7 @@
 #!/bin/bash
+rm log/aof.log
+echo -e "*3\n\$3\nset\n\$4\nkey1\n\$6\nvalue1\n*3\n\$3\nset\n\$4\nkey2\n\$6\nvalue2\n*2\n\$3\ndel\n\$4\nkey1" > log/aof.log
+
 cargo update
 cargo build
 cargo run --bin server master > /dev/null &
